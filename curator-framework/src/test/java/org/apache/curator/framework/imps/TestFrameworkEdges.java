@@ -24,7 +24,6 @@ import org.apache.curator.RetryPolicy;
 import org.apache.curator.RetrySleeper;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.framework.SafeIsTtlMode;
 import org.apache.curator.framework.api.BackgroundCallback;
 import org.apache.curator.framework.api.CreateBuilder;
 import org.apache.curator.framework.api.CuratorEvent;
@@ -40,13 +39,12 @@ import org.apache.curator.test.BaseClassForTests;
 import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingCluster;
 import org.apache.curator.test.TestingServer;
+import org.apache.curator.test.compatibility.CuratorTestBase;
 import org.apache.curator.test.compatibility.Timing2;
 import org.apache.curator.utils.CloseableUtils;
-import org.apache.curator.utils.Compatibility;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
@@ -63,9 +61,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Test(groups = CuratorTestBase.zk35TestCompatibilityGroup)
 public class TestFrameworkEdges extends BaseClassForTests
 {
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -92,7 +90,7 @@ public class TestFrameworkEdges extends BaseClassForTests
                 }
             };
             client.checkExists().usingWatcher(watcher).forPath("/foobar");
-            Compatibility.injectSessionExpiration(client.getZookeeperClient().getZooKeeper());
+            client.getZookeeperClient().getZooKeeper().getTestable().injectSessionExpiration();
             Assert.assertTrue(timing.awaitLatch(expiredLatch));
         }
     }
@@ -112,9 +110,8 @@ public class TestFrameworkEdges extends BaseClassForTests
         // by the Instance Curator is connected to but the session kill needs a quorum vote (it's a
         // transaction)
 
-        try (TestingCluster cluster = new TestingCluster(3))
+        try (TestingCluster cluster = createAndStartCluster(3))
         {
-            cluster.start();
             InstanceSpec instanceSpec0 = cluster.getServers().get(0).getInstanceSpec();
 
             CountDownLatch serverStoppedLatch = new CountDownLatch(1);
@@ -327,7 +324,7 @@ public class TestFrameworkEdges extends BaseClassForTests
             final String TEST_PATH = "/a/b/c/test-";
             long ttl = timing.forWaiting().milliseconds() * 1000;
             CreateBuilder firstCreateBuilder = client.create();
-            if ( SafeIsTtlMode.isTtl(mode) )
+            if ( mode.isTTL() )
             {
                 firstCreateBuilder.withTtl(ttl);
             }
@@ -343,7 +340,7 @@ public class TestFrameworkEdges extends BaseClassForTests
 
             CreateBuilderImpl createBuilder = (CreateBuilderImpl)client.create();
             createBuilder.withProtection();
-            if ( SafeIsTtlMode.isTtl(mode) )
+            if ( mode.isTTL() )
             {
                 createBuilder.withTtl(ttl);
             }
@@ -532,7 +529,7 @@ public class TestFrameworkEdges extends BaseClassForTests
             };
 
             client.checkExists().usingWatcher(watcher).forPath("/sessionTest");
-            Compatibility.injectSessionExpiration(client.getZookeeperClient().getZooKeeper());
+            client.getZookeeperClient().getZooKeeper().getTestable().injectSessionExpiration();
             Assert.assertTrue(timing.awaitLatch(sessionDiedLatch));
             Assert.assertNotNull(client.checkExists().forPath("/sessionTest"));
         }
